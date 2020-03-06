@@ -1,0 +1,17 @@
+<Project>
+    <PropertyGroup>
+        <BaseIntermediateOutputPath>$(SolutionDir)\Build\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+        <OutputPath>$(SolutionDir)\Build\$(MSBuildProjectName)\$(Configuration)</OutputPath>
+    </PropertyGroup>
+    
+    <PropertyGroup>
+        <Authors>Torbjörn Gyllebring</Authors>
+        <Description>Your Processes. Like a Boss.</Description>
+        <RepositoryUrl>https://github.com/drunkcod/ProcessBoss</RepositoryUrl>
+        <VersionPrefix>0.0.1</VersionPrefix>
+        <AssemblyVersion>0.0.0.1</AssemblyVersion>
+        <AssemblyInformationalVersion>$(VersionPrefix)</AssemblyInformationalVersion>
+        <AssemblyFileVersion>2020.03.09</AssemblyFileVersion>
+        <PackageVersion>$(AssemblyInformationalVersion)</PackageVersion>
+    </PropertyGroup>
+</Project>
