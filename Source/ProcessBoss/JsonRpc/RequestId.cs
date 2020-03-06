@@ -62,5 +62,4 @@ namespace ProcessBoss.JsonRpc
 			else writer.WriteStringValue(value.String);
 		}
 	}
-
 }
