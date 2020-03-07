@@ -43,13 +43,14 @@ namespace ProcessBoss.JsonRpc
 
 		public static bool operator==(RequestId x, RequestId y) => x.Equals(y);
 		public static bool operator!=(RequestId x, RequestId y) => !x.Equals(y);
+
+		public static implicit operator RequestId(string value) => new RequestId(value);
 	}
 
 	class RequestIdJsonConverter : JsonConverter<RequestId>
 	{
 		public override RequestId Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-			reader.TokenType switch
-			{
+			reader.TokenType switch {
 				JsonTokenType.Number => new RequestId(reader.GetInt64()),
 				JsonTokenType.String => new RequestId(reader.GetString()),
 				JsonTokenType.Null => default,
