@@ -44,6 +44,7 @@ namespace ProcessBoss.JsonRpc
 		public static bool operator==(RequestId x, RequestId y) => x.Equals(y);
 		public static bool operator!=(RequestId x, RequestId y) => !x.Equals(y);
 
+		public static implicit operator RequestId(long value) => new RequestId(value);
 		public static implicit operator RequestId(string value) => new RequestId(value);
 	}
 
