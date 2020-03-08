@@ -1,5 +1,6 @@
 using System;
-using System.IO;
+using System.Buffers;
+using System.Runtime.Serialization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -8,6 +9,10 @@ namespace ProcessBoss.JsonRpc
 	[JsonConverter(typeof(JsonRpcMessageConverter))]
 	public class JsonRpcMessage 
 	{
+		protected JsonRpcMessage() { }
+
+		[JsonPropertyName("jsonrpc")]
+		public string Version { get; set; } = "2.0";
 	}
 
 	public class JsonRpcMessageConverter : JsonConverter<JsonRpcMessage>
@@ -51,6 +56,7 @@ namespace ProcessBoss.JsonRpc
 					}
 				}
 			}
+
 			if(id.IsMissing)
 				return new JsonRpcNotification {
 					Version = version,
@@ -60,6 +66,7 @@ namespace ProcessBoss.JsonRpc
 
 			if(method != null) 
 				return new JsonRpcRequest {
+					Version = version,
 					Id = id,
 					Method = method,
 					Parameters = @params,
@@ -73,16 +80,12 @@ namespace ProcessBoss.JsonRpc
 			};
 		}
 
-		public override void Write(Utf8JsonWriter writer, JsonRpcMessage value, JsonSerializerOptions options) {
-			throw new NotImplementedException();
-		}
+		public override void Write(Utf8JsonWriter writer, JsonRpcMessage value, JsonSerializerOptions options) =>
+			JsonSerializer.Serialize(writer, value, value.GetType(), options);
 	}
 
 	public class JsonRpcRequest : JsonRpcMessage
 	{
-		[JsonPropertyName("jsonrpc")]
-		public string Version => "2.0";
-
 		[JsonPropertyName("id")]
 		public RequestId Id { get; set; }
 
@@ -95,9 +98,6 @@ namespace ProcessBoss.JsonRpc
 
 	public class JsonRpcNotification : JsonRpcMessage
 	{
-		[JsonPropertyName("jsonrpc")]
-		public string Version { get; set; }
-
 		[JsonPropertyName("method")]
 		public string Method { get; set; }
 
@@ -105,11 +105,9 @@ namespace ProcessBoss.JsonRpc
 		public object Parameters { get; set; }
 	}
 
+	[JsonConverter(typeof(JsonRpcResponseConverter))]
 	public class JsonRpcResponse : JsonRpcMessage, IRpcResponse
 	{
-		[JsonPropertyName("jsonrpc")]
-		public string Version { get; set; }
-
 		[JsonPropertyName("id")]
 		public RequestId Id { get; set; }
 
@@ -129,14 +127,105 @@ namespace ProcessBoss.JsonRpc
 			};
 	}
 
+	class JsonRpcMessageColumns
+	{
+		static JsonRpcMessageColumns instance;
+		
+		JsonRpcMessageColumns() { }
+
+		public readonly JsonEncodedText Version = JsonEncodedText.Encode("jsonrpc");
+		public readonly JsonEncodedText Id = JsonEncodedText.Encode("id");
+		public readonly JsonEncodedText Result = JsonEncodedText.Encode("result");
+		public readonly JsonEncodedText Error = JsonEncodedText.Encode("error");
+
+		public static JsonRpcMessageColumns Instance => instance ?? (instance = new JsonRpcMessageColumns());
+	}
+
+	public class JsonRpcResponseConverter : JsonRpcConverter<JsonRpcResponse>
+	{
+		JsonRpcMessageColumns columns => JsonRpcMessageColumns.Instance;
+
+		public override JsonRpcResponse Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+			if(reader.TokenType != JsonTokenType.StartObject)
+				throw new JsonException();
+
+			var r = new JsonRpcResponse();
+			while(reader.Read() && reader.TokenType != JsonTokenType.EndObject) {
+				if(reader.ValueTextEquals(columns.Id.EncodedUtf8Bytes)) {
+					reader.Read();
+					r.Id = ReadRequestId(ref reader, typeof(RequestId), options);
+				}
+				else if(reader.ValueTextEquals(columns.Result.EncodedUtf8Bytes))
+					r.Result = JsonSerializer.Deserialize<object>(ref reader, options);
+				else if(reader.ValueTextEquals(columns.Error.EncodedUtf8Bytes))
+					r.Error = JsonSerializer.Deserialize<JsonRpcError>(ref reader, options);
+				else if(reader.ValueTextEquals(columns.Version.EncodedUtf8Bytes))
+					r.Version = reader.GetString();
+				else
+					reader.Skip();
+			}
+
+			return r;
+		}
+
+		public override void Write(Utf8JsonWriter writer, JsonRpcResponse value, JsonSerializerOptions options) {
+			writer.WriteStartObject();
+			
+			writer.WriteString(columns.Version, value.Version);			
+			
+			writer.WritePropertyName(columns.Id);
+			WriteRequestId(writer, value.Id, options);
+			
+			if(value.Result != null) {
+				writer.WritePropertyName(columns.Result);
+				JsonSerializer.Serialize(writer, value.Result, options);
+			}
+
+			if(value.Error != null) {
+				writer.WritePropertyName(columns.Error);
+				JsonSerializer.Serialize(writer, value.Error, options);
+			}
+			
+			writer.WriteEndObject();
+		}
+	}
+
 	static class JsonElementExtensions
 	{
+		class ArrayBufferWriter<T> : IBufferWriter<T>
+		{
+			const int MinBuffer = 256;
+			T[] buffer = new T[MinBuffer];
+			int pos;
+
+			public void Advance(int count) {
+				pos += count;
+			}
+
+			public Memory<T> GetMemory(int sizeHint = 0) {
+				EnsureSpace(sizeHint);
+				return new Memory<T>(buffer, pos, sizeHint);
+			}
+
+			public Span<T> GetSpan(int sizeHint = 0) {
+				EnsureSpace(sizeHint);
+				return new Span<T>(buffer, pos, sizeHint);
+			}
+
+			void EnsureSpace(int sizeHint) {
+				if(buffer.Length - pos < sizeHint)
+					Array.Resize(ref buffer, buffer.Length + sizeHint);
+			}
+
+			public ReadOnlySpan<T> AsReadonlySpan() => new ReadOnlySpan<T>(buffer, 0, pos);
+		}
+
 		public static T ToObject<T>(in this JsonElement json, JsonSerializerOptions options = null) {
-			var ms = new MemoryStream();
-			using(var writer = new Utf8JsonWriter(ms))
+			var bytes = new ArrayBufferWriter<byte>();
+			using(var writer = new Utf8JsonWriter(bytes))
 				json.WriteTo(writer);
-			ms.TryGetBuffer(out var buffer);
-			return JsonSerializer.Deserialize<T>(buffer, options);
+
+			return JsonSerializer.Deserialize<T>(bytes.AsReadonlySpan(), options);
 		}
 	}
 

@@ -48,20 +48,12 @@ namespace ProcessBoss.JsonRpc
 		public static implicit operator RequestId(string value) => new RequestId(value);
 	}
 
-	class RequestIdJsonConverter : JsonConverter<RequestId>
+	public class RequestIdJsonConverter : JsonRpcConverter<RequestId>
 	{
 		public override RequestId Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-			reader.TokenType switch {
-				JsonTokenType.Number => new RequestId(reader.GetInt64()),
-				JsonTokenType.String => new RequestId(reader.GetString()),
-				JsonTokenType.Null => default,
-				_ => throw new InvalidOperationException(),
-			};
+			ReadRequestId(ref reader, typeToConvert, options);
 
-		public override void Write(Utf8JsonWriter writer, RequestId value, JsonSerializerOptions options) {
-			if (value.IsNumber)
-				writer.WriteNumberValue(value.Number);
-			else writer.WriteStringValue(value.String);
-		}
+		public override void Write(Utf8JsonWriter writer, RequestId value, JsonSerializerOptions options) => 
+			WriteRequestId(writer, value, options);
 	}
 }
