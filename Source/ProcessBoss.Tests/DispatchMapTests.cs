@@ -1,8 +1,8 @@
-﻿using System;
+using System;
 using Cone;
 using Xunit;
 
-namespace ProcessBoss.JsonRpc.Tests
+namespace ProcessBoss.Rpc.Tests
 {
 	public class DispatchMapTests
 	{

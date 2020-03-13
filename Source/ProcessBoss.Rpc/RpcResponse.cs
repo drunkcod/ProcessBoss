@@ -1,6 +1,6 @@
 using System;
 
-namespace ProcessBoss.JsonRpc
+namespace ProcessBoss.Rpc
 {
 	public interface IRpcResponse
 	{

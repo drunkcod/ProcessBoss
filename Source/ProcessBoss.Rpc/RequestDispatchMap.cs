@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace ProcessBoss.JsonRpc
+namespace ProcessBoss.Rpc
 {
 	public class RequestDispatchMap
 	{

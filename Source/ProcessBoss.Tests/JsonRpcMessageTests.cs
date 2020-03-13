@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Cone;
+using ProcessBoss.Rpc;
 using Xunit;
 
 namespace ProcessBoss.JsonRpc.Tests
@@ -27,10 +28,21 @@ namespace ProcessBoss.JsonRpc.Tests
 		[Fact]
 		public void deserialize_message_type() =>
 			Check.That(
-				() => FromJson(ToJson(new { method = "notification" })) is JsonRpcNotification,
+				() => FromJson(ToJson(new { method = "notification" })) is JsonRpcRequest,
 				() => FromJson(ToJson(new { id = 1, method = "request" })) is JsonRpcRequest,
 				() => FromJson(ToJson(new { id = 2, result = "response" })) is JsonRpcResponse,
 				() => FromJson(ToJson(new { id = 3, error = new JsonRpcError { Code = -1 } })) is JsonRpcResponse);
+
+		[Fact]
+		public void notification() =>
+			Check.That(() => HasProperty(new JsonRpcRequest { Method = "notify!" }, "id") == false);
+
+		[Fact]
+		public void response_roundtrip() {
+			var r = (JsonRpcResponse)Check.That(
+				() => FromJson(ToJson(new JsonRpcResponse { Id = 1, Result = new SomeThing { Value = 42 } })) is JsonRpcResponse);
+			Check.That(() => r.GetResult<SomeThing>().Value == 42);
+		}
 
 		[Fact]
 		public void request_as_message() {
@@ -41,15 +53,25 @@ namespace ProcessBoss.JsonRpc.Tests
 		}
 	}
 
+	public class JsonRpcRequestTests : JsonRpcFixture<JsonRpcRequest>
+	{
+		[Fact]
+		public void request_roundtrip() => Check
+			.With(() => FromJson(ToJson(new JsonRpcRequest { Id = 1, Method = "MyRequest", Parameters = new[]{ "Hello" } })))
+			.That(
+				x => x.Id == 1,
+				x => x.Method == "MyRequest");
+	}
+
 	public class JsonRpcResponseTests : JsonRpcFixture<JsonRpcResponse>
 	{
 		[Fact]
-		public void response_roundtrip() {
-			var r = (JsonRpcResponse)Check.That(
-				() => FromJson(ToJson(new JsonRpcResponse { Id = 1, Result = new SomeThing { Value = 42 } })) is JsonRpcResponse);
-			Check.That(() => r.GetResult<SomeThing>().Value == 42);
-		}
-
+		public void response_roundtrip() => Check
+			.With(() => FromJson(ToJson(new JsonRpcResponse { Id = 1, Result = new SomeThing { Value = 42 } })))
+			.That(
+				x => x.Id == 1,
+				x => x.GetResult<SomeThing>().Value == 42);
+		
 		[Fact]
 		public void success_response_must_not_contain_error() =>
 			Check.That(() => HasProperty(new JsonRpcResponse { Id = "success", Result = "Ok" }, "error") == false);
@@ -61,7 +83,7 @@ namespace ProcessBoss.JsonRpc.Tests
 		[Fact]
 		public void response_error() {
 			var error = new JsonRpcError { Code = -1, Message = "Error Error" };
-			var r = (JsonRpcResponse)FromJson(ToJson(new JsonRpcResponse { Id = 1, Error = error }));
+			var r = FromJson(ToJson(new JsonRpcResponse { Id = 1, Error = error }));
 
 			var ex = (JsonRpcException)Check.That(() => ((IRpcResponse)r).Exception is JsonRpcException);
 			Check.That(

@@ -5,8 +5,4 @@
     <LangVersion>8.0</LangVersion>
   </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="System.Text.Json" Version="4.7.1" />
-  </ItemGroup>
-
 </Project>

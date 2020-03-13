@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Cone;
+using ProcessBoss.Rpc;
 using Xunit;
 
 namespace ProcessBoss.JsonRpc.Tests
@@ -47,6 +48,10 @@ namespace ProcessBoss.JsonRpc.Tests
 				() => FromJson(new MyEvent { Id = new RequestId(3) }).Id == new RequestId(3),
 				() => FromJson(new MyEvent { Id = new RequestId("bar") }).Id == new RequestId("bar"));
 		}
+
+		[Fact]
+		public void null_is_not_missing() => 
+			Check.That(() => default(RequestId) != RequestId.Null);
 
 		class MyEvent 
 		{ 

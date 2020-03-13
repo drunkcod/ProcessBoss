@@ -1,13 +1,16 @@
 using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ProcessBoss.JsonRpc;
 
-namespace ProcessBoss.JsonRpc
+namespace ProcessBoss.Rpc
 {
 	[JsonConverter(typeof(RequestIdJsonConverter))]
 	public struct RequestId : IEquatable<RequestId>
 	{
 		static readonly string NumberMarker = new string(new[]{ '\0' });
+
+		public static RequestId Null => new RequestId(null);
 
 		readonly long number;
 		readonly string str;
@@ -38,8 +41,8 @@ namespace ProcessBoss.JsonRpc
 		public override string ToString() => JsonSerializer.Serialize(this);
 
 		public bool Equals(RequestId other) =>
-			(other.IsNumber && this.IsNumber && other.number == this.number)
-			|| other.str == this.str;
+			other.number == this.number
+			&& (other.IsNumber && this.IsNumber || other.str == this.str);
 
 		public static bool operator==(RequestId x, RequestId y) => x.Equals(y);
 		public static bool operator!=(RequestId x, RequestId y) => !x.Equals(y);
@@ -51,9 +54,9 @@ namespace ProcessBoss.JsonRpc
 	public class RequestIdJsonConverter : JsonRpcConverter<RequestId>
 	{
 		public override RequestId Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-			ReadRequestId(ref reader, typeToConvert, options);
+			ReadRequestId(ref reader);
 
 		public override void Write(Utf8JsonWriter writer, RequestId value, JsonSerializerOptions options) => 
-			WriteRequestId(writer, value, options);
+			WriteRequestId(writer, value);
 	}
 }
