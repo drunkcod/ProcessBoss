@@ -5,22 +5,26 @@ using Xunit;
 
 namespace ProcessBoss.JsonRpc.Tests
 {
-	public class JsonRpcFixture<T>
+	public class JsonRpcFixture
+	{
+		protected T RoundtripAs<T>(object item) => JsonSerializer.Deserialize<T>(ToJson(item));
+
+		protected string ToJson(object obj) => JsonSerializer.Serialize(obj);
+
+		protected bool HasProperty(object obj, string propertyName) {
+			using (var json = JsonDocument.Parse(ToJson(obj)))
+				return json.RootElement.TryGetProperty(propertyName, out var _);
+		}
+	}
+
+	public class JsonRpcFixture<T> : JsonRpcFixture
 	{
 		protected class SomeThing
 		{
 			public int Value { get; set; }
 		}
 
-		protected T FromJson(string input) => JsonSerializer.Deserialize<T>(input);
-		
-		protected  string ToJson(object obj) => JsonSerializer.Serialize(obj);
-		
-		protected bool HasProperty(object obj, string propertyName) {
-			using (var json = JsonDocument.Parse(ToJson(obj)))
-				return json.RootElement.TryGetProperty(propertyName, out var _);
-		}
-
+		protected T FromJson(string input) => JsonSerializer.Deserialize<T>(input);		
 	}
 
 	public class JsonRpcMessageTests : JsonRpcFixture<JsonRpcMessage>
@@ -51,16 +55,6 @@ namespace ProcessBoss.JsonRpc.Tests
 				() => ToJson(new { r = (JsonRpcMessage)request }) == ToJson(new { r = request }),
 				() => ToJson(new { r = (JsonRpcMessage)null }) == ToJson(new { r = (JsonRpcRequest)null}));
 		}
-	}
-
-	public class JsonRpcRequestTests : JsonRpcFixture<JsonRpcRequest>
-	{
-		[Fact]
-		public void request_roundtrip() => Check
-			.With(() => FromJson(ToJson(new JsonRpcRequest { Id = 1, Method = "MyRequest", Parameters = new[]{ "Hello" } })))
-			.That(
-				x => x.Id == 1,
-				x => x.Method == "MyRequest");
 	}
 
 	public class JsonRpcResponseTests : JsonRpcFixture<JsonRpcResponse>

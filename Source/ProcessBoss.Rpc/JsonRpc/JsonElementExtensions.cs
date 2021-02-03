@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Text.Json;
 
 namespace ProcessBoss.JsonRpc
 {
-	static class JsonElementExtensions
+	public static class JsonElementExtensions
 	{
 		class ArrayBufferWriter<T> : IBufferWriter<T>
 		{
@@ -32,6 +32,27 @@ namespace ProcessBoss.JsonRpc
 			}
 
 			public ReadOnlySpan<T> AsReadonlySpan() => new ReadOnlySpan<T>(buffer, 0, pos);
+		}
+
+		public static object GetValue(this JsonElement json, Type type) {
+			switch(Type.GetTypeCode(type)) {
+				case TypeCode.Boolean: return json.GetBoolean();
+				case TypeCode.SByte: return json.GetSByte();
+				case TypeCode.Int16: return json.GetInt16();
+				case TypeCode.Int32: return json.GetInt32();
+				case TypeCode.Int64: return json.GetInt64();
+				case TypeCode.Byte: return json.GetByte();
+				case TypeCode.UInt16: return json.GetUInt16();
+				case TypeCode.UInt32: return json.GetUInt32();
+				case TypeCode.UInt64: return json.GetUInt64();
+				case TypeCode.Single: return json.GetSingle();
+				case TypeCode.Double: return json.GetDouble();
+				case TypeCode.Decimal: return json.GetDecimal();
+				case TypeCode.String: return json.GetString();
+
+				case TypeCode.DateTime: return json.GetDateTime();
+			}
+			return Convert.ChangeType(json.GetRawText(), type);
 		}
 
 		public static T ToObject<T>(in this JsonElement json, JsonSerializerOptions options = null) {

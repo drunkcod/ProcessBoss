@@ -18,6 +18,11 @@ namespace ProcessBoss.JsonRpc
 		public object Parameters { get; set; }
 
 		public bool IsNotification => Id.IsMissing;
+
+		public bool HasPositionalParameters => Parameters switch {			
+			JsonElement json => json.ValueKind == JsonValueKind.Array,
+			_ => false,
+		};
 	}
 
 	public class JsonRpcRequestConveter : JsonRpcConverter<JsonRpcRequest>
