@@ -1,5 +1,5 @@
 using System;
-using Cone;
+using CheckThat;
 using Xunit;
 
 namespace ProcessBoss.Rpc.Tests

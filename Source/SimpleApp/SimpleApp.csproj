@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+	  <OutputType>exe</OutputType>
+	  <TargetFramework>net6</TargetFramework>
+	  <ImplicitUsings>enable</ImplicitUsings>
+	  <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="DataBoss.PowerArgs" Version="0.0.101" />
+  </ItemGroup>
+
+</Project>

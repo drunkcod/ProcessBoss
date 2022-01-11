@@ -1,46 +1,12 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
 
 namespace ProcessBoss
 {
-	public class ProcessTaskStartInfo
-	{
-		public string FileName;
-		public string Arguments;
-		public Encoding Encoding;
-
-		internal ProcessStartInfo ToProcessStartInfo() {
-			var si = new ProcessStartInfo {
-				FileName = FileName,
-				Arguments = Arguments,
-				UseShellExecute = false,
-				CreateNoWindow = true,
-				RedirectStandardInput = true,
-				RedirectStandardOutput = true,
-				RedirectStandardError = true,
-			};
-			if (Encoding != null) {
-				si.StandardOutputEncoding = Encoding;
-				si.StandardErrorEncoding = Encoding;
-			}
-
-			return si;
-		}
-	}
-
-	public class ProcessTaskResult
-	{
-		public int ExitCode;
-		public MemoryStream Output;
-		public Encoding OutputEncoding;
-		public MemoryStream Error;	
-		public Encoding ErrorEncoding;
-	}
 
 	public static class ProcessTask
 	{
@@ -51,46 +17,74 @@ namespace ProcessBoss
 			}
 		}
 
-		class ProcessWaitState
+		class ProcessWait
 		{
-			public Process Process;
-			public RegisteredWaitHandle Handle;
-			public IProcessTask ProcessTask;
+			readonly Process process;
+			readonly IProcessTask processTask;
+			RegisteredWaitHandle? handle;
+
+			ProcessWait(Process process, IProcessTask processTask) {
+				this.process = process;
+				this.processTask = processTask;
+			}
+
+			public static void Register(Process process, IProcessTask processTask) {
+				var p = new ProcessWait(process, processTask);
+				p.handle = ThreadPool.RegisterWaitForSingleObject(
+					new ProcessWaitHandle(process),
+					HandleWait,
+					p, -1,
+					executeOnlyOnce: true);
+			}
+
+			static void HandleWait(object state, bool timedOut) {
+				var x = (ProcessWait)state;
+				x.handle?.Unregister(null);
+				x.handle = null;
+				try {
+					x.processTask.SetResult(x.process);
+				}
+				catch (Exception ex) {
+					x.processTask.SetException(ex);
+				}
+				finally {
+					x.process?.Dispose();
+				}
+			}
 		}
 
 		class DefaultProcessTaskState
 		{
-			public ProcessTaskResult Result;
-			public Process Process;
-			public Task IO;
+			public readonly ProcessTaskResult Result;
+			public readonly Task IO;
 
+			DefaultProcessTaskState(ProcessTaskResult result, Task io) {
+				this.Result = result;
+				this.IO = io;
+			}
+				 
 			public static DefaultProcessTaskState Create(Process p) => Create(p, null);
 			
-			public static DefaultProcessTaskState Create(Process p, Func<StreamWriter, Task> writeInput) {
-				var result = new ProcessTaskResult {
-					Output = new MemoryStream(),
-					OutputEncoding = p.StandardOutput.CurrentEncoding,
-					Error = new MemoryStream(),
-					ErrorEncoding = p.StandardError.CurrentEncoding,
-				};
+			public static DefaultProcessTaskState Create(Process p, Func<StreamWriter, Task>? writeInput) {
+				var result = new ProcessTaskResult(
+					new MemoryStream(),
+					p.StandardOutput.CurrentEncoding,
+					new MemoryStream(),
+					p.StandardError.CurrentEncoding);;
 
-				return new DefaultProcessTaskState {
-					Result = result,
-					Process = p,
-					IO = Task.WhenAll(
+				return new DefaultProcessTaskState(result, 
+					Task.WhenAll(
 						HandleInput(p, writeInput),
 						p.StandardOutput.BaseStream.CopyToAsync(result.Output),
-						p.StandardError.BaseStream.CopyToAsync(result.Error)),
-				};
+						p.StandardError.BaseStream.CopyToAsync(result.Error)));
 			}
 
-			public static async Task<ProcessTaskResult> GetResult(DefaultProcessTaskState p) {
+			public static async Task<ProcessTaskResult> GetResult(Process process, DefaultProcessTaskState p) {
+				p.Result.ExitCode = process.ExitCode;
+
 				await p.IO.ConfigureAwait(false);
 				p.Result.Output.Position = 0;
 				p.Result.Error.Position = 0;
-				p.Result.ExitCode = p.Process.ExitCode;
-
-				p.Process = null;
 
 				return p.Result;
 			}
@@ -98,84 +92,58 @@ namespace ProcessBoss
 
 		interface IProcessTask
 		{
-			void OnSuccess();
-			void OnError(Exception exception);
+			void SetResult(Process process);
+			void SetException(Exception exception);
 		}
 
 		class ProcessTaskState<TState, TResult> : IProcessTask
 		{
-			readonly TaskCompletionSource<TResult> tsc = new TaskCompletionSource<TResult>();
+			readonly TaskCompletionSource<TResult> tsc = new();
 			readonly TState state;
-			readonly Func<TState, TResult> getResult;
+			readonly Func<Process, TState, TResult> getResult;
 
-			public ProcessTaskState(TState state, Func<TState, TResult> getResult) {
+			public ProcessTaskState(TState state, Func<Process, TState, TResult> getResult) {
 				this.state = state;
 				this.getResult = getResult;
 			}
 
 			public Task<TResult> Task => tsc.Task;
 
-			public void OnSuccess() => tsc.SetResult(getResult(state));
-			public void OnError(Exception ex) => tsc.SetException(ex);
+			public void SetResult(Process process) => tsc.SetResult(getResult(process, state));
+			public void SetException(Exception ex) => tsc.SetException(ex);
 		}
 
-		static async Task HandleInput(Process p, Func<StreamWriter, Task> writeInput) {
+		static async Task HandleInput(Process p, Func<StreamWriter, Task>? writeInput) {
 			if(writeInput != null)
 				await writeInput(p.StandardInput);
 			else
 				p.StandardInput.Close();
 		}
 
-		static T Id<T>(T item) => item;
+		static T Id<T>(Process p, T item) => item;
 
 		public static Task<ProcessTaskResult> Start(ProcessTaskStartInfo startInfo) => 
-			Start(startInfo.ToProcessStartInfo(), DefaultProcessTaskState.Create, DefaultProcessTaskState.GetResult);
+			Start(startInfo, DefaultProcessTaskState.Create, DefaultProcessTaskState.GetResult);
 		
 		public static Task<ProcessTaskResult> Start(ProcessTaskStartInfo startInfo, Func<StreamWriter, Task> writeInput) => 
-			Start(startInfo.ToProcessStartInfo(), x => DefaultProcessTaskState.Create(x, writeInput), DefaultProcessTaskState.GetResult);
-		
-		public static Task<TResult> Start<TState, TResult>(ProcessTaskStartInfo startInfo, Func<Process, TState> setup, Func<TState, Task<TResult>> getResult) => 
-			Start(startInfo.ToProcessStartInfo(), setup, getResult);
-		
-		public static Task Start(ProcessTaskStartInfo startInfo, Func<Process, Task> setup) =>
-			Start(startInfo.ToProcessStartInfo(), setup, Id);
+			Start(startInfo, x => DefaultProcessTaskState.Create(x, writeInput), DefaultProcessTaskState.GetResult);
 
-		public static async Task<TResult> Start<TState, TResult>(ProcessStartInfo startInfo, Func<Process, TState> setup, Func<TState, Task<TResult>> getResult) =>
+		public static Task Start(ProcessTaskStartInfo startInfo, Func<Process, Task> setup) =>
+			Start(startInfo, setup, Id);
+
+		public static async Task<TResult> Start<TState, TResult>(ProcessTaskStartInfo startInfo, Func<Process, TState> setup, Func<TState, Task<TResult>> getResult) =>
 			await getResult(await Start(startInfo, setup, Id).ConfigureAwait(false)).ConfigureAwait(false);
 		
-		public static Task<TResult> Start<TState, TResult>(ProcessStartInfo startInfo, Func<Process, TState> setup, Func<TState, TResult> getResult) {
-			var p = Process.Start(startInfo);
+		public static async Task<TResult> Start<TState, TResult>(ProcessTaskStartInfo startInfo, Func<Process, TState> setup, Func<Process, TState, Task<TResult>> getResult) {
+			var t = Start<TState, Task<TResult>>(startInfo, setup, getResult);
+			return await (await t.ConfigureAwait(false)).ConfigureAwait(false);
+		}
+
+		public static Task<TResult> Start<TState, TResult>(ProcessTaskStartInfo startInfo, Func<Process, TState> setup, Func<Process, TState, TResult> getResult) {
+			var p = Process.Start(startInfo.ToProcessStartInfo());
 			var state = new ProcessTaskState<TState, TResult>(setup(p), getResult);
-			RegisterWait(p, state);
+			ProcessWait.Register(p, state);
 			return state.Task;
-		}
-
-		static void RegisterWait(Process p, IProcessTask state) {
-			var wait = new ProcessWaitState {
-				Process = p,
-				ProcessTask = state,
-			};
-			wait.Handle = ThreadPool.RegisterWaitForSingleObject(
-				new ProcessWaitHandle(p),
-				HandleWait,
-				wait, -1,
-				executeOnlyOnce: true);
-		}
-
-		static void HandleWait(object state, bool timedOut) {
-			var x = (ProcessWaitState)state;
-			x.Handle.Unregister(null);
-			x.Handle = null;
-			try {
-				x.ProcessTask.OnSuccess();
-			}
-			catch (Exception ex) {
-				x.ProcessTask.OnError(ex);
-			}
-			finally {
-				x.Process.Dispose();
-				x.Process = null;
-			}
 		}
 	}
 }

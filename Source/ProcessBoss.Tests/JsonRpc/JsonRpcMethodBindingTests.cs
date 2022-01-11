@@ -1,9 +1,7 @@
 using System;
-using System.Collections.Generic;
 using System.Reflection;
-using System.Text;
 using System.Text.Json;
-using Cone;
+using CheckThat;
 using Xunit;
 
 namespace ProcessBoss.JsonRpc.Tests
@@ -20,7 +18,7 @@ namespace ProcessBoss.JsonRpc.Tests
 			Check.That(() => TryBindParameters(ArrayFromItemsMethod, r, out bound));
 			Check.That(
 				() => bound[0] == (object)7,
-				() => bound[1] == "Hello World.");
+				() => (string)bound[1] == "Hello World.");
 		}
 
 		[Fact]
@@ -35,7 +33,7 @@ namespace ProcessBoss.JsonRpc.Tests
 			Check.That(() => TryBindParameters(ArrayFromItemsMethod, r, out bound));
 			Check.That(
 				() => bound[0] == (object)42,
-				() => bound[1] == "The Answer Is");
+				() => (string)bound[1] == "The Answer Is");
 		}
 
 		static bool TryBindParameters(MethodInfo method, JsonRpcRequest request, out object[] bound) {

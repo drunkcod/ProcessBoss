@@ -1,6 +1,6 @@
 using System;
 using System.Text.Json;
-using Cone;
+using CheckThat;
 using Xunit;
 
 namespace ProcessBoss.JsonRpc.Tests
