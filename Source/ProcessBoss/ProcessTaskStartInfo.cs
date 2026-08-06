@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
 
@@ -6,14 +7,14 @@ namespace ProcessBoss
 	public class ProcessTaskStartInfo
 	{
 		public string? WorkingDirectory;
-		public string? FileName;
+		public required string FileName;
 		public string? Arguments;
 		public Encoding? Encoding;
+		public IDictionary<string, string>? EnvironmentVariables;
 
 		internal ProcessStartInfo ToProcessStartInfo() {
-			var si = new ProcessStartInfo {
+			var si = new ProcessStartInfo(FileName) {
 				WorkingDirectory = WorkingDirectory,
-				FileName = FileName,
 				Arguments = Arguments,
 				UseShellExecute = false,
 				CreateNoWindow = true,
@@ -25,7 +26,9 @@ namespace ProcessBoss
 				si.StandardOutputEncoding = Encoding;
 				si.StandardErrorEncoding = Encoding;
 			}
-
+			if (EnvironmentVariables is not null)
+				foreach (var x in EnvironmentVariables)
+					si.EnvironmentVariables[x.Key] = x.Value;
 			return si;
 		}
 	}
